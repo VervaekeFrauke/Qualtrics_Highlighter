@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Qualtrics Highlighter</title>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+#stimulus { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
+.highlighted { background-color: yellow; cursor: pointer; }
+.followup { margin-top: 20px; }
+.followup-item { margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+</style>
+</head>
+<body>
+
+<div id="stimulus">
+<!-- Your stimulus text goes here -->
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+</div>
+
+<div id="followup" class="followup"></div>
+
+<script>
+const stimulusDiv = document.getElementById("stimulus");
+const followupDiv = document.getElementById("followup");
+let highlights = [];
+
+// Function to render highlights
+function renderHighlights() {
+    let html = stimulusDiv.textContent;
+    highlights.sort((a,b) => b.length - a.length); // longest first
+    highlights.forEach(h => {
+        const safe = h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(safe, "g");
+        html = html.replace(regex, `<span class="highlighted">${h}</span>`);
+    });
+    stimulusDiv.innerHTML = html;
+
+    // Add click-to-remove
+    stimulusDiv.querySelectorAll('.highlighted').forEach(span => {
+        span.onclick = () => {
+            const idx = highlights.indexOf(span.textContent);
+            if(idx !== -1) {
+                highlights.splice(idx,1);
+                renderHighlights();
+                renderFollowups();
+            }
+        };
+    });
+}
+
+// Function to render follow-up inputs
+function renderFollowups() {
+    followupDiv.innerHTML = "<h3>Please explain each highlighted segment:</h3>";
+    highlights.forEach((h,i) => {
+        const div = document.createElement("div");
+        div.className = "followup-item";
+        const p = document.createElement("p");
+        p.textContent = `Highlight ${i+1}: ${h}`;
+        const textarea = document.createElement("textarea");
+        textarea.id = `reason_${i+1}`;
+        textarea.style.width = "100%";
+        textarea.style.height = "80px";
+        div.appendChild(p);
+        div.appendChild(textarea);
+        followupDiv.appendChild(div);
+    });
+}
+
+// Selection handling
+stimulusDiv.addEventListener("mouseup", () => {
+    const sel = window.getSelection();
+    const text = sel.toString().trim();
+    if(text && !highlights.includes(text)) {
+        highlights.push(text);
+        renderHighlights();
+        renderFollowups();
+    }
+    sel.removeAllRanges();
+});
+
+// Function to send data back to Qualtrics
+function sendToQualtrics() {
+    const data = highlights.join("|||");
+    window.parent.Qualtrics.SurveyEngine.setEmbeddedData("all_highlights", data);
+    highlights.forEach((h,i) => {
+        const val = document.getElementById(`reason_${i+1}`)?.value || "";
+        window.parent.Qualtrics.SurveyEngine.setEmbeddedData(`reason_${i+1}`, val);
+    });
+    window.parent.Qualtrics.SurveyEngine.setEmbeddedData("highlight_count", highlights.length);
+}
+
+// Optional: hook into Next button using postMessage
+window.addEventListener("message", e => {
+    if(e.data === "qualtricsNext") sendToQualtrics();
+});
+</script>
+
+</body>
+</html>
