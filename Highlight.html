@@ -3,25 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <title>Qualtrics Highlighter</title>
-
 <style>
   body {
     font-family: sans-serif;
     padding: 20px;
     line-height: 1.6;
   }
-
   #textContainer {
     border: 1px solid #ddd;
     padding: 15px;
     border-radius: 6px;
+    user-select: none; /* disable native selection */
   }
-
   .char {
     cursor: pointer;
     white-space: pre-wrap;
   }
-
   .highlighted {
     background-color: yellow;
   }
@@ -30,19 +27,18 @@
 <body>
 
 <h3>Please highlight any part of the text:</h3>
-
 <div id="textContainer"></div>
 
 <script>
-// ------------------------------------------------------------
-// 1. CONFIGURE TEXT HERE
-// ------------------------------------------------------------
+// ----------------------------
+// 1. Configure text
+// ----------------------------
 const rawText = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`;
 
-// ------------------------------------------------------------
-// 2. BUILD SAFE CHARACTER SPANS
-// ------------------------------------------------------------
+// ----------------------------
+// 2. Build character spans
+// ----------------------------
 function buildText() {
     const container = document.getElementById("textContainer");
     container.innerHTML = "";
@@ -53,72 +49,83 @@ function buildText() {
         span.dataset.index = idx;
         span.textContent = ch;
 
-        span.addEventListener("click", () => toggleHighlight(span));
+        // Drag-to-highlight & click-to-unhighlight handled later
         container.appendChild(span);
+    });
+
+    attachEvents();
+}
+
+// ----------------------------
+// 3. Drag & click events
+// ----------------------------
+function attachEvents() {
+    let isDragging = false;
+
+    const container = document.getElementById("textContainer");
+    container.addEventListener("mousedown", () => { isDragging = true; });
+    window.addEventListener("mouseup", () => { isDragging = false; });
+
+    const chars = [...document.querySelectorAll(".char")];
+    chars.forEach(span => {
+        span.addEventListener("mouseover", () => {
+            if (isDragging) span.classList.add("highlighted");
+        });
+        span.addEventListener("click", () => {
+            span.classList.toggle("highlighted");
+        });
     });
 }
 
-// ------------------------------------------------------------
-// 3. SINGLE-CHARACTER HIGHLIGHT TOGGLE
-// ------------------------------------------------------------
-function toggleHighlight(span) {
-    span.classList.toggle("highlighted");
-}
-
-// ------------------------------------------------------------
-// 4. COLLECT HIGHLIGHTS IN TEXT ORDER
-// ------------------------------------------------------------
+// ----------------------------
+// 4. Collect consecutive highlights
+// ----------------------------
 function collectHighlightsInOrder() {
     const highlighted = [...document.querySelectorAll(".highlighted")];
-    highlighted.sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index));
+    highlighted.sort((a,b)=>Number(a.dataset.index)-Number(b.dataset.index));
 
-    // Merge consecutive highlighted characters into one string
     const groups = [];
     let current = [];
 
-    highlighted.forEach((span, i) => {
+    highlighted.forEach((span,i) => {
         const idx = Number(span.dataset.index);
-        const prevIdx = i > 0 ? Number(highlighted[i-1].dataset.index) : null;
+        const prevIdx = i>0 ? Number(highlighted[i-1].dataset.index) : null;
 
-        if (prevIdx !== null && idx === prevIdx + 1) {
+        if (prevIdx!==null && idx === prevIdx+1) {
             current.push(span.textContent);
         } else {
             if (current.length) groups.push(current.join(""));
             current = [span.textContent];
         }
     });
-
     if (current.length) groups.push(current.join(""));
-
     return groups;
 }
 
-// ------------------------------------------------------------
-// 5. SEND TO QUALTRICS VIA postMessage
-// ------------------------------------------------------------
+// ----------------------------
+// 5. Send highlights to Qualtrics
+// ----------------------------
 function sendToQualtrics() {
     const highlights = collectHighlightsInOrder();
-
     parent.postMessage({
         type: "qualtricsHighlightData",
         highlights: highlights
     }, "*");
 }
 
-// ------------------------------------------------------------
-// 6. LISTEN FOR "qualtricsNext"
-// ------------------------------------------------------------
-window.addEventListener("message", (event) => {
-    if (event.data === "qualtricsNext") {
-        sendToQualtrics();
-    }
+// ----------------------------
+// 6. Listen for Qualtrics Next
+// ----------------------------
+window.addEventListener("message", (event)=>{
+    if(event.data==="qualtricsNext") sendToQualtrics();
 });
 
-// ------------------------------------------------------------
-// 7. INITIALIZE
-// ------------------------------------------------------------
+// ----------------------------
+// 7. Initialize
+// ----------------------------
 buildText();
 </script>
 
 </body>
 </html>
+
