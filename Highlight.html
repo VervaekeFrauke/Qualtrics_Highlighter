@@ -1,13 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Qualtrics Highlighter</title>
-
+<meta charset="utf-8" />
+<title>Qualtrics Highlighter - Robust</title>
 <style>
-body { font-family: sans-serif; padding: 20px; }
-#stimulus { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
-.highlighted { background-color: yellow; cursor: pointer; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 16px; }
+  #stimulus {
+    border: 1px solid #ccc;
+    padding: 12px;
+    border-radius: 6px;
+    white-space: pre-wrap;      /* preserve spaces/newlines exactly like in the source text */
+    line-height: 1.4;
+    user-select: text;
+  }
+  .highlighted {
+    background: #ffeb3b;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -17,87 +26,134 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor i
 </div>
 
 <script>
-const stimDiv = document.getElementById("stimulus");
-let rawText = stimDiv.textContent;
-let highlights = [];  
-// each item: {start: Number, end: Number, text: String}
+(function() {
+  const stimDiv = document.getElementById('stimulus');
 
-// ---- Re-render text with highlights applied ----
-function render() {
-    let html = "";
+  // rawText is the authoritative plain-text copy of the stimulus
+  const rawText = stimDiv.textContent;
+  let highlights = []; // {start: Number, end: Number, text: String}
+
+  // Render DOM from rawText + highlights using createTextNode + span nodes.
+  function render() {
+    // sort highlights by start
+    highlights.sort((a,b) => a.start - b.start);
+
+    // create document fragment to avoid innerHTML string replace issues
+    const frag = document.createDocumentFragment();
     let last = 0;
-
-    // Sort by start index
-    highlights.sort((a, b) => a.start - b.start);
-
-    for (let h of highlights) {
-        html += rawText.slice(last, h.start);  
-        html += `<span class="highlighted" data-start="${h.start}" data-end="${h.end}">${rawText.slice(h.start, h.end)}</span>`;
-        last = h.end;
+    for (const h of highlights) {
+      // append text from last to highlight.start
+      if (h.start > last) {
+        frag.appendChild(document.createTextNode(rawText.slice(last, h.start)));
+      }
+      // create highlighted span for exact range
+      const span = document.createElement('span');
+      span.className = 'highlighted';
+      span.dataset.start = h.start;
+      span.dataset.end = h.end;
+      span.textContent = rawText.slice(h.start, h.end);
+      frag.appendChild(span);
+      last = h.end;
     }
-    html += rawText.slice(last);
+    // append remaining text
+    if (last < rawText.length) {
+      frag.appendChild(document.createTextNode(rawText.slice(last)));
+    }
 
-    stimDiv.innerHTML = html;
+    // replace content (safe because we used nodes, not parsed HTML strings)
+    stimDiv.innerHTML = '';
+    stimDiv.appendChild(frag);
 
-    // Add click-to-remove
-    stimDiv.querySelectorAll(".highlighted").forEach(span => {
-        span.onclick = () => {
-            const s = Number(span.dataset.start);
-            const e = Number(span.dataset.end);
-            highlights = highlights.filter(h => !(h.start === s && h.end === e));
-            render();
-        };
-    });
-}
-
-// ---- Detect selection and add to highlights ----
-stimDiv.addEventListener("mouseup", () => {
-    const sel = window.getSelection();
-    const text = sel.toString();
-
-    if (!text.trim()) return;
-
-    let anchorNode = sel.anchorNode;
-    let focusNode = sel.focusNode;
-    if (!anchorNode || !focusNode) return;
-
-    // Compute absolute start & end indexes in rawText
-    const full = rawText;
-    const selection = sel.getRangeAt(0);
-
-    const range = selection;
-    const preRange = range.cloneRange();
-    preRange.selectNodeContents(stimDiv);
-
-    preRange.setEnd(range.startContainer, range.startOffset);
-    let start = preRange.toString().length;
-    let end = start + text.length;
-
-    // Prevent duplicate identical ranges
-    if (!highlights.some(h => h.start === start && h.end === end)) {
-        highlights.push({ start, end, text });
+    // attach click-to-remove handlers to spans
+    stimDiv.querySelectorAll('.highlighted').forEach(span => {
+      span.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const s = Number(span.dataset.start);
+        const e = Number(span.dataset.end);
+        highlights = highlights.filter(h => !(h.start === s && h.end === e));
         render();
+      });
+    });
+  }
+
+  // compute absolute start index of selection relative to rawText
+  function getSelectionOffsets() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    const text = range.toString();
+    if (!text.trim() && text.length === 0) return null;
+
+    // Create a clone range that starts at the beginning of the stimDiv and ends at selection start
+    const preRange = document.createRange();
+    preRange.selectNodeContents(stimDiv);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    const start = preRange.toString().length;
+    const end = start + text.length;
+
+    return { start, end, text };
+  }
+
+  // Add highlight if it doesn't overlap exactly the same range
+  function addHighlightFromSelection() {
+    const info = getSelectionOffsets();
+    if (!info) return;
+    // avoid duplicates (same start & end)
+    if (highlights.some(h => h.start === info.start && h.end === info.end)) {
+      window.getSelection().removeAllRanges();
+      return;
     }
+    // Prevent highlights outside rawText bounds
+    if (info.start < 0 || info.end > rawText.length || info.start >= info.end) {
+      window.getSelection().removeAllRanges();
+      return;
+    }
+    highlights.push({ start: info.start, end: info.end, text: info.text });
+    render();
+    window.getSelection().removeAllRanges();
+  }
 
-    sel.removeAllRanges();
-});
+  // Hook selection end
+  stimDiv.addEventListener('mouseup', function(e) {
+    // Use a short timeout because some browsers finalize selection slightly after mouseup
+    setTimeout(addHighlightFromSelection, 0);
+  });
 
-// ---- Export highlights to Qualtrics before Next button ----
-function sendToQualtrics() {
-    window.parent.Qualtrics.SurveyEngine.setEmbeddedData("highlight_count", highlights.length);
+  // Also support double-click (word selection), keyboard selection, etc.
+  stimDiv.addEventListener('keyup', function(e) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') return;
+    setTimeout(addHighlightFromSelection, 0);
+  });
 
-    highlights.forEach((h, i) => {
+  // Send highlights to Qualtrics when told (postMessage)
+  function sendToQualtrics() {
+    try {
+      // set highlight_count
+      window.parent.Qualtrics.SurveyEngine.setEmbeddedData('highlight_count', highlights.length);
+      // set per-highlight fields
+      highlights.forEach((h, i) => {
         window.parent.Qualtrics.SurveyEngine.setEmbeddedData(`highlight_${i+1}_text`, h.text);
         window.parent.Qualtrics.SurveyEngine.setEmbeddedData(`highlight_${i+1}_start`, h.start);
         window.parent.Qualtrics.SurveyEngine.setEmbeddedData(`highlight_${i+1}_end`, h.end);
-    });
-}
+      });
+      // clear any unused reason_N fields? Qualtrics will leave them blank if not set.
+    } catch (err) {
+      console.warn('Could not set embedded data (are you testing locally without Qualtrics parent?)', err);
+    }
+  }
 
-// ---- Receive signal from Qualtrics Next button ----
-window.addEventListener("message", e => {
-    if (e.data === "qualtricsNext") sendToQualtrics();
-});
+  window.addEventListener('message', function(e) {
+    if (e.data === 'qualtricsNext') {
+      sendToQualtrics();
+    }
+  });
+
+  // initial render
+  render();
+
+  // Expose for debugging in console (optional)
+  window.__highlighter_debug = { rawText, highlights, render };
+})();
 </script>
-
 </body>
 </html>
