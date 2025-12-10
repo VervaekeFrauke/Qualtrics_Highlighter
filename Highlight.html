@@ -1,148 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<title>Qualtrics Highlighter — Range-based (fixed)</title>
+<meta charset="UTF-8">
+<title>Qualtrics Highlighter</title>
+
 <style>
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 16px; }
-  #stimulus {
-    border: 1px solid #ccc;
-    padding: 12px;
-    border-radius: 6px;
-    white-space: pre-wrap;   /* preserve whitespace/newlines exactly */
-    line-height: 1.45;
-    user-select: text;
+  body {
+    font-family: sans-serif;
+    padding: 20px;
+    line-height: 1.6;
   }
-  .highlighted {
-    background: #ffeb3b;
+
+  #textContainer {
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 6px;
+  }
+
+  .char {
     cursor: pointer;
+    white-space: pre-wrap;
+  }
+
+  .highlighted {
+    background-color: yellow;
   }
 </style>
 </head>
 <body>
 
-<div id="stimulus">
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-</div>
+<h3>Please highlight any part of the text:</h3>
+
+<div id="textContainer"></div>
 
 <script>
-(function() {
-  const stimDiv = document.getElementById('stimulus');
+// ------------------------------------------------------------
+// 1. CONFIGURE TEXT HERE
+// ------------------------------------------------------------
+const rawText = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
+Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`;
 
-  // Helper: unwrap a span (replace it with its text node)
-  function unwrapSpan(span) {
-    const textNode = document.createTextNode(span.textContent);
-    span.parentNode.replaceChild(textNode, span);
-  }
+// ------------------------------------------------------------
+// 2. BUILD SAFE CHARACTER SPANS
+// ------------------------------------------------------------
+function buildText() {
+    const container = document.getElementById("textContainer");
+    container.innerHTML = "";
 
-  // Helper: find highlight spans that intersect a Range
-  function spansIntersectingRange(range) {
-    const spans = Array.from(stimDiv.querySelectorAll('.highlighted'));
-    return spans.filter(span => {
-      try {
-        // If the span is partly or wholly inside the range, that's an intersection
-        const spanRange = document.createRange();
-        spanRange.selectNodeContents(span);
-        // tests: compare boundary points
-        return !(range.compareBoundaryPoints(Range.END_TO_START, spanRange) <= 0 ||
-                 range.compareBoundaryPoints(Range.START_TO_END, spanRange) >= 0);
-      } catch (e) {
-        return false;
-      }
+    [...rawText].forEach((ch, idx) => {
+        const span = document.createElement("span");
+        span.classList.add("char");
+        span.dataset.index = idx;
+        span.textContent = ch;
+
+        span.addEventListener("click", () => toggleHighlight(span));
+        container.appendChild(span);
     });
-  }
+}
 
-  // Add a highlight by wrapping the current selection's Range in a span.
-  function addHighlightFromSelection() {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    if (range.collapsed) return;
-
-    // Ensure selection is inside stimDiv
-    if (!stimDiv.contains(range.commonAncestorContainer)) return;
-
-    // Step 1: unwrap any existing highlight spans that intersect this range
-    const intersecting = spansIntersectingRange(range);
-    intersecting.forEach(unwrapSpan);
-
-    // After unwrapping, selection may have changed; re-get selection range
-    // (safe to get the first range again)
-    if (!sel || sel.rangeCount === 0) return;
-    const freshRange = sel.getRangeAt(0);
-    if (freshRange.collapsed) {
-      sel.removeAllRanges();
-      return;
-    }
-
-    // Step 2: create a new span and insert the selected contents into it
-    const span = document.createElement('span');
-    span.className = 'highlighted';
-    span.dataset.id = 'h' + Date.now() + Math.floor(Math.random()*10000);
-
-    // extractContents will remove the selected fragment and return a DocumentFragment
-    const frag = freshRange.extractContents();
-    span.appendChild(frag);
-    freshRange.insertNode(span);
-
-    // Normalize (merge adjacent text nodes)
-    stimDiv.normalize();
-
-    // Attach click handler to remove this highlight
-    span.addEventListener('click', function(e) {
-      e.stopPropagation();
-      // replace span with its text node
-      const textNode = document.createTextNode(span.textContent);
-      span.parentNode.replaceChild(textNode, span);
-      stimDiv.normalize();
-    });
-
-    // Clear selection
-    sel.removeAllRanges();
-  }
-
-  // Hook mouseup and keyup to create highlights
-  stimDiv.addEventListener('mouseup', function() {
-    // small timeout so selection finalizes in some browsers
-    setTimeout(addHighlightFromSelection, 0);
-  });
-
-  stimDiv.addEventListener('keyup', function() {
-    // capture keyboard-based selections
-    setTimeout(addHighlightFromSelection, 0);
-  });
-
-  // Build array of highlights in document order (span text only)
-  function collectHighlightsInOrder() {
-    const spans = Array.from(stimDiv.querySelectorAll('.highlighted'));
-    // Order is DOM order already; map to text
-    return spans.map(s => s.textContent);
-  }
-
-  // Send highlights back to Qualtrics (called when parent posts 'qualtricsNext')
-  function sendToQualtrics() {
-    const highlights = collectHighlightsInOrder();
-    try {
-      window.parent.Qualtrics.SurveyEngine.setEmbeddedData('highlight_count', highlights.length);
-      highlights.forEach((text, i) => {
-        window.parent.Qualtrics.SurveyEngine.setEmbeddedData(`highlight_${i+1}_text`, text);
-      });
-      // Optionally clear later indices? Qualtrics leaves blank if not set.
-    } catch (err) {
-      console.warn('Not in Qualtrics environment or error setting embedded data:', err);
-    }
-  }
-
-  // Listen for Next message
-  window.addEventListener('message', function(e) {
-    if (e.data === 'qualtricsNext') sendToQualtrics();
-  });
-
-  // Expose for debugging (optional)
-  window.__highlighter_internal = { collectHighlightsInOrder };
-
-})();
-</script>
-
-</body>
-</html>
+// ------------------------------------------------------------
+// 3.
