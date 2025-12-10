@@ -59,4 +59,66 @@ function buildText() {
 }
 
 // ------------------------------------------------------------
-// 3.
+// 3. SINGLE-CHARACTER HIGHLIGHT TOGGLE
+// ------------------------------------------------------------
+function toggleHighlight(span) {
+    span.classList.toggle("highlighted");
+}
+
+// ------------------------------------------------------------
+// 4. COLLECT HIGHLIGHTS IN TEXT ORDER
+// ------------------------------------------------------------
+function collectHighlightsInOrder() {
+    const highlighted = [...document.querySelectorAll(".highlighted")];
+    highlighted.sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index));
+
+    // Merge consecutive highlighted characters into one string
+    const groups = [];
+    let current = [];
+
+    highlighted.forEach((span, i) => {
+        const idx = Number(span.dataset.index);
+        const prevIdx = i > 0 ? Number(highlighted[i-1].dataset.index) : null;
+
+        if (prevIdx !== null && idx === prevIdx + 1) {
+            current.push(span.textContent);
+        } else {
+            if (current.length) groups.push(current.join(""));
+            current = [span.textContent];
+        }
+    });
+
+    if (current.length) groups.push(current.join(""));
+
+    return groups;
+}
+
+// ------------------------------------------------------------
+// 5. SEND TO QUALTRICS VIA postMessage
+// ------------------------------------------------------------
+function sendToQualtrics() {
+    const highlights = collectHighlightsInOrder();
+
+    parent.postMessage({
+        type: "qualtricsHighlightData",
+        highlights: highlights
+    }, "*");
+}
+
+// ------------------------------------------------------------
+// 6. LISTEN FOR "qualtricsNext"
+// ------------------------------------------------------------
+window.addEventListener("message", (event) => {
+    if (event.data === "qualtricsNext") {
+        sendToQualtrics();
+    }
+});
+
+// ------------------------------------------------------------
+// 7. INITIALIZE
+// ------------------------------------------------------------
+buildText();
+</script>
+
+</body>
+</html>
