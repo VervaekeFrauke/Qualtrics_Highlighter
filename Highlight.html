@@ -107,17 +107,24 @@ function collectHighlightsInOrder() {
 // ----------------------------
 function sendToQualtrics() {
     const highlights = collectHighlightsInOrder();
+
+    // Use ancestorOrigins if available to set Qualtrics origin
+    const qualtricsOrigin = window.location.ancestorOrigins?.[0] || "*";
+
     parent.postMessage({
         type: "qualtricsHighlightData",
         highlights: highlights
-    }, "*");
+    }, qualtricsOrigin);
 }
 
 // ----------------------------
 // 6. Listen for Qualtrics Next
 // ----------------------------
-window.addEventListener("message", (event)=>{
-    if(event.data==="qualtricsNext") sendToQualtrics();
+window.addEventListener("message", (event) => {
+    // Accept messages only from GitHub Pages origin
+    if (event.origin !== "https://vervaekefrauke.github.io") return;
+
+    if(event.data === "qualtricsNext") sendToQualtrics();
 });
 
 // ----------------------------
@@ -128,4 +135,3 @@ buildText();
 
 </body>
 </html>
-
