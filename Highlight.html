@@ -107,6 +107,7 @@ function collectHighlightsInOrder() {
 // ----------------------------
 function sendToQualtrics() {
     const highlights = collectHighlightsInOrder();
+  console.log("Sending highlights:", highlights);
 
     // Use ancestorOrigins if available to set Qualtrics origin
     const qualtricsOrigin = window.location.ancestorOrigins?.[0] || "*";
@@ -135,3 +136,4 @@ buildText();
 
 </body>
 </html>
+
